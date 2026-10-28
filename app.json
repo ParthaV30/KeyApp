@@ -1,21 +1,22 @@
 {
   "expo": {
-    "name": "KeyMitraMobileApp",
-    "slug": "KeyMitraMobileApp",
+    "name": "keymachinesales.in",
+    "slug": "key-mitra-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "keymitramobileapp",
-    "userInterfaceStyle": "automatic",
+    "icon": "./assets/images/keymitra-icon.png",
+    "scheme": "keymitra",
+    "userInterfaceStyle": "light",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "bundleIdentifier": "com.suriyakeys.keymitra",
+      "supportsTablet": true,
+      "icon": "./assets/images/keymitra-icon.png"
     },
     "android": {
+      "package": "com.suriyakeys.main",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#1D4656",
+        "foregroundImage": "./assets/images/keymitra-icon.png"
       },
       "predictiveBackGestureEnabled": false
     },
@@ -28,11 +29,20 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "backgroundColor": "#1D4656",
+          "image": "./assets/images/keymitra-icon.png",
+          "imageWidth": 180
         }
-      ]
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Key Mitra administrators to add product photos.",
+          "microphonePermission": false
+        }
+      ],
+      "expo-image",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

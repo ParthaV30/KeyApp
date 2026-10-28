@@ -1,56 +1,85 @@
-# Welcome to your Expo app 👋
+# Key Mitra
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Key Mitra is a cross-platform Android and iOS storefront for Giriraja, built with Expo, React Native, TypeScript, and Expo Router. Supabase provides PostgreSQL, customer authentication, product image storage, and role-based data access.
 
-## Get started
+## Features
 
-1. Install dependencies
+- Customer accounts, sign-in, order history, and database-synced saved items
+- Product search and categories, catalog details, options/variants, and stock-aware cart
+- Cash-on-delivery checkout. The database calculates prices, checks stock, reserves inventory, and creates the order atomically.
+- Admin dashboard at `/admin` for products, variants, stock, categories, orders, and customer profiles
+- PostgreSQL migrations, seed catalog, Row Level Security (RLS) policies, and Supabase Storage rules
 
-   ```bash
+## Local setup
+
+1. Install Node.js 20+ and Docker Desktop, then start Docker Desktop.
+2. Install dependencies and start the local Supabase services:
+
+   ```sh
    npm install
+   npm run db:start
    ```
 
-2. Start the app
+3. Supabase prints local API credentials after startup. Copy `.env.example` to `.env` and set `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` from `npx supabase status`.
+4. If the services were already running before migrations were added, apply the schema and seed data:
 
-   ```bash
+   ```sh
+   npm run db:reset
+   ```
+
+5. Start the app:
+
+   ```sh
    npx expo start
    ```
 
-In the output, you'll find options to open the app in a
+The local Supabase Studio is at `http://127.0.0.1:54323`. Use Expo Go to open the mobile app. To use the admin page in a desktop browser, run `npm run web` and open `/admin`.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## Create the first admin
 
-You can start developing by editing the files inside the **src/app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+1. Create a customer account through the app. For a local database, auth emails can be viewed in the local Inbucket service shown by `npx supabase status`.
+2. In Supabase Studio, open SQL Editor and promote that account using its email:
 
-## Get a fresh project
+   ```sql
+   update public.profiles
+   set role = 'admin'
+   where user_id = (select id from auth.users where email = 'admin@example.com');
+   ```
 
-When you're ready, run:
+3. Sign in again and open `/admin` or select **Admin dashboard** from the Account tab.
 
-```bash
-npm run reset-project
+Never grant admin access from the public sign-up form. Role changes are restricted by RLS and should only be made by a trusted database administrator.
+
+## Deploy the backend
+
+Create a Supabase project, then link and push the versioned schema:
+
+```sh
+npx supabase login
+npx supabase link --project-ref YOUR_PROJECT_REF
+npm run db:push
 ```
 
-This command will move the starter code to the **example** directory and create a blank **src/app** directory where you can start developing.
+Set the project URL and publishable key in your Expo build environment and local `.env`. The publishable key is intended for client apps; keep the Supabase `service_role` key out of the mobile app and admin UI. RLS is the security boundary for client access. Configure production email confirmation/SMTP, auth redirect URLs, database backups, and monitoring in Supabase before launch.
 
-### Other setup steps
+The admin dashboard can upload product images to the public `product-images` bucket or save an image URL. Customers can read active catalog data; only admins can write catalog and storage records.
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+## Build Android and iOS
 
-## Learn more
+Use EAS Build for signed app binaries:
 
-To learn more about developing your project with Expo, look at the following resources:
+```sh
+npx eas-cli@latest build:configure
+npx eas-cli@latest build --platform android
+npx eas-cli@latest build --platform ios
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Store releases need Google Play and Apple Developer signing credentials. EAS builds in the cloud, so local Xcode is not required for iOS.
 
-## Join the community
+## Operational notes
 
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- Product stock starts at zero and must be set in Admin before a product can be ordered.
+- Products with selectable options can be managed using option lines in the admin product form: `Option name | price | stock | SKU`.
+- The seeded products and catalog imagery came from publicly visible website content. Verify descriptions, prices, product rights, stock, dispatch rules, privacy policy, and terms before selling.
+- COD is the only enabled payment method. No online payment processing is configured.
+- This project does not connect to an existing Giriraja production database, order system, inventory provider, or customer CRM. It starts with a separate database that the store owner must operate and maintain.
