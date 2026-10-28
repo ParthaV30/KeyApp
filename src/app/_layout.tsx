@@ -1,18 +1,46 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
+import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import { useEffect } from 'react';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+import { ShopProvider } from '@/features/shop/ShopContext';
+import { CatalogProvider } from '@/features/shop/CatalogContext';
+import { AuthProvider } from '@/features/auth/AuthContext';
+import { C } from '@/components/shop/ui';
+import { AppErrorBoundary } from '@/components/AppErrorBoundary';
 
-SplashScreen.preventAutoHideAsync();
+void SplashScreen.preventAutoHideAsync();
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+export default function RootLayout() {
+  const [fontsLoaded, fontError] = useFonts({
+    Manrope: require('../../assets/fonts/Manrope-Variable.ttf'),
+  });
+
+  useEffect(() => {
+    if (fontsLoaded || fontError) void SplashScreen.hideAsync();
+  }, [fontsLoaded, fontError]);
+
+  if (!fontsLoaded && !fontError) return null;
+
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
-    </ThemeProvider>
+    <AppErrorBoundary>
+      <AuthProvider>
+        <CatalogProvider>
+          <ShopProvider>
+            <StatusBar style="dark" />
+            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.paper } }}>
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="product/[id]" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="orders" options={{ presentation: 'card' }} />
+              <Stack.Screen name="checkout" options={{ presentation: 'card' }} />
+              <Stack.Screen name="auth" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="admin" options={{ presentation: 'card' }} />
+              <Stack.Screen name="invoice" options={{ presentation: 'card' }} />
+            </Stack>
+          </ShopProvider>
+        </CatalogProvider>
+      </AuthProvider>
+    </AppErrorBoundary>
   );
 }
