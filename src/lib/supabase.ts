@@ -3,6 +3,13 @@ import { createClient } from '@supabase/supabase-js';
 import 'react-native-url-polyfill/auto';
 import { secureSessionStorage } from '@/lib/secureSessionStorage';
 
+// WebSocket for Supabase Realtime: browsers and React Native provide one,
+// but Node (Expo Router server-side rendering) may not — fall back to ws.
+if (typeof WebSocket === 'undefined') {
+  // Direct eval keeps Metro from bundling the Node-only `ws` into native/web builds, where this branch never runs.
+  globalThis.WebSocket = eval('require')('ws') as typeof WebSocket;
+}
+
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const publishableKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
