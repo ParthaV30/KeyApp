@@ -59,7 +59,7 @@ export function BillingPanel({ products, variants, invoices, orders, available, 
 
   const recordPayment = (invoice: InvoiceRow, payment: PaymentEntry) => attempt(async () => {
     if (!supabase) return false;
-    const { error } = await supabase.rpc('record_business_invoice_payment', { p_invoice_id: invoice.id, p_amount: payment.amount, p_payment_method: payment.method, p_reference: payment.reference });
+    const { error } = await supabase.rpc('record_business_invoice_payment', { p_invoice_id: invoice.id, p_amount: payment.amount, p_method: payment.method, p_reference: payment.reference });
     if (error) { setMessage(adminErrorMessage(error, 'Could not save the payment. Check the amount and try again.')); return false; }
     setMessage(`${formatINR(payment.amount)} recorded against ${invoice.invoice_code}.`);
     await reload();
