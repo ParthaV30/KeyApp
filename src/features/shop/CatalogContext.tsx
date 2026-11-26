@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import { categories as localCategories, products as localProducts, type Product, type ProductCategory, type ProductVariant } from '@/data/products';
+import { fetchAll } from '@/lib/fetchAll';
 import { backendConfigured, supabase } from '@/lib/supabase';
 
 type CatalogValue = {
@@ -28,13 +29,14 @@ export function CatalogProvider({ children }: React.PropsWithChildren) {
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    if (!supabase) return;
+    const client = supabase;
+    if (!client) return;
     try {
       const [{ data: categoryRows, error: categoryError }, { data: productRows, error: productError }, { data: variantRows, error: variantError }, { data: settingsRow, error: settingsError }] = await Promise.all([
-        supabase.from('categories').select('id,name,slug,description,image_url,sort_order').eq('is_active', true).order('sort_order'),
-        supabase.from('products').select('id,slug,sku,name,description,brand,image_url,price,has_variants,stock_quantity,is_featured,is_active,categories(name)').eq('is_active', true).order('created_at', { ascending: false }),
-        supabase.from('product_variants').select('id,product_id,name,price,stock_quantity,sku').eq('is_active', true).order('sort_order'),
-        supabase.from('store_settings').select('support_phone,dispatch_cutoff,default_shipping_fee,free_delivery_threshold').eq('id', true).maybeSingle(),
+        client.from('categories').select('id,name,slug,description,image_url,sort_order').eq('is_active', true).order('sort_order'),
+        fetchAll((from, to) => client.from('products').select('id,slug,sku,name,description,brand,image_url,price,has_variants,stock_quantity,is_featured,is_active,categories(name)').eq('is_active', true).order('created_at', { ascending: false }).order('id').range(from, to)),
+        fetchAll((from, to) => client.from('product_variants').select('id,product_id,name,price,stock_quantity,sku').eq('is_active', true).order('sort_order').order('id').range(from, to)),
+        client.from('store_settings').select('support_phone,dispatch_cutoff,default_shipping_fee,free_delivery_threshold').eq('id', true).maybeSingle(),
       ]);
       if (categoryError) throw categoryError;
       if (productError) throw productError;
