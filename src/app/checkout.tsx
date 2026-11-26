@@ -52,7 +52,8 @@ export default function CheckoutScreen() {
         p_note: note.trim(),
       });
       if (error) {
-        Alert.alert('Order could not be placed', 'Please check your delivery details and stock, then try again. Your order was not submitted.');
+        // P0001 = a deliberate message raised by place_cod_order (bad state, too many pending orders, stock).
+        Alert.alert('Order could not be placed', `${error.code === 'P0001' && error.message ? `${error.message}. ` : 'Please check your delivery details and stock, then try again. '}Your order was not submitted.`);
         if (__DEV__) console.warn('Order placement failed.', error.code ?? 'unknown');
         return;
       }

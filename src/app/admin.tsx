@@ -21,6 +21,7 @@ import { adminErrorMessage } from '@/features/admin/errors';
 import type { AdminVariant, InvoiceRow, OrderRow } from '@/features/admin/types';
 import { useAuth } from '@/features/auth/AuthContext';
 import { useCatalog } from '@/features/shop/CatalogContext';
+import { fetchAll } from '@/lib/fetchAll';
 import { supabase } from '@/lib/supabase';
 import { categories as localCategories, products as localProducts, type Product } from '@/data/products';
 
@@ -40,6 +41,7 @@ export default function AdminScreen() {
   // The side menu fits from small tablets up; below this the menu becomes a swipeable strip.
   const wide = width >= 720;
   const [busy, setBusy] = useState(false);
+  const [listLimit, setListLimit] = useState(100); // newest-first rows loaded for orders and invoices; "Load more" adds 100
   const actionLock = useRef(false);
   const [message, setMessage] = useState('');
   const [categories, setCategories] = useState<CategoryRow[]>([]);
@@ -95,16 +97,17 @@ export default function AdminScreen() {
   const loadDashboard = useCallback(async () => {
     try {
       if (!supabase || role !== 'admin') return;
+      const client = supabase;
     const [categoryResult, productResult, productRows, orderResult, orderList, customerList, variantRows, settingsResult, invoiceResult, billingSettingsResult] = await Promise.all([
       supabase.from('categories').select('id,name,slug,image_url,is_active').order('sort_order'),
       supabase.from('products').select('id', { count: 'exact', head: true }),
-      supabase.from('products').select('id,slug,sku,name,description,brand,category_id,image_url,price,has_variants,stock_quantity,is_active,hsn_sac,gst_rate,categories(name)').order('created_at', { ascending: false }),
+      fetchAll((from, to) => client.from('products').select('id,slug,sku,name,description,brand,category_id,image_url,price,has_variants,stock_quantity,is_active,hsn_sac,gst_rate,categories(name)').order('created_at', { ascending: false }).order('id').range(from, to)),
       supabase.from('orders').select('id', { count: 'exact', head: true }),
-      supabase.from('orders').select('id,order_number,status,created_at,updated_at,subtotal,shipping_fee,total,payment_method,payment_status,shipping_name,shipping_phone,shipping_address,shipping_city,shipping_state,shipping_postal_code,shipping_gstin,customer_note').order('created_at', { ascending: false }).limit(100),
+      supabase.from('orders').select('id,order_number,status,created_at,updated_at,subtotal,shipping_fee,total,payment_method,payment_status,shipping_name,shipping_phone,shipping_address,shipping_city,shipping_state,shipping_postal_code,shipping_gstin,customer_note').order('created_at', { ascending: false }).limit(listLimit),
       supabase.from('profiles').select('user_id,display_name,phone,created_at').order('created_at', { ascending: false }).limit(250),
-      supabase.from('product_variants').select('id,product_id,name,price,stock_quantity,sku').eq('is_active', true).order('sort_order'),
+      fetchAll((from, to) => client.from('product_variants').select('id,product_id,name,price,stock_quantity,sku').eq('is_active', true).order('sort_order').order('id').range(from, to)),
       supabase.from('store_settings').select('support_phone,dispatch_cutoff,default_shipping_fee,free_delivery_threshold').eq('id', true).maybeSingle(),
-      supabase.from('billing_invoices').select('id,order_id,invoice_code,issue_date,status,payment_status,total,paid_total,credited_total,buyer_name,buyer_phone').order('issue_date', { ascending: false }).limit(100),
+      supabase.from('billing_invoices').select('id,order_id,invoice_code,issue_date,status,payment_status,total,paid_total,credited_total,buyer_name,buyer_phone').order('issue_date', { ascending: false }).order('created_at', { ascending: false }).limit(listLimit),
       supabase.from('billing_settings').select('business_name,business_address,business_city,business_state,business_postal_code,business_gstin,invoice_prefix,gst_enabled,shipping_gst_rate').eq('id', true).maybeSingle(),
     ]);
     let productData = productRows.data;
@@ -147,7 +150,7 @@ export default function AdminScreen() {
     } catch {
       setMessage('Could not load store data. Check your connection and retry.');
     }
-  }, [role]);
+  }, [role, listLimit]);
 
   // The callback awaits all admin queries before updating the dashboard state.
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -171,7 +174,7 @@ export default function AdminScreen() {
   };
   const editProduct = (item: Product) => {
     setActiveProductId(item.id); setName(item.name); setSlug(item.slug); setDescription(item.description); setBrand(item.brand ?? ''); setPrice(item.hasVariants ? '' : String(item.price)); setStock(String(item.stockQuantity ?? 0)); setImageUrl(item.imageUrl ?? ''); setSku(item.sku ?? ''); setHsnSac(item.hsnSac ?? ''); setGstRate(String(item.gstRate ?? 0)); setVariantLines(''); setSelectedCategory(item.category); setTab('Products');
-    if (supabase && item.hasVariants) void Promise.resolve(supabase.from('product_variants').select('name,price,stock_quantity,sku').eq('product_id', item.id).then(({ data, error }) => {
+    if (supabase && item.hasVariants) void Promise.resolve(supabase.from('product_variants').select('name,price,stock_quantity,sku').eq('product_id', item.id).eq('is_active', true).order('sort_order').then(({ data, error }) => {
       if (error) throw error;
       setVariantLines((data ?? []).map(row => `${row.name} | ${row.price} | ${row.stock_quantity} | ${row.sku ?? ''}`).join('\n'));
     })).catch(() => setMessage('Could not load this product’s options. Check your connection and retry.'));
@@ -191,23 +194,24 @@ export default function AdminScreen() {
     const parsedGstRate = Number(gstRate);
     if (!name.trim() || !slug.trim() || (!hasVariants && (!price.trim() || !Number.isFinite(amount) || amount < 0)) || !Number.isInteger(quantity) || quantity < 0 || !Number.isFinite(parsedGstRate) || parsedGstRate < 0 || parsedGstRate > 100 || parsedVariants.some(row => !row.name || !Number.isFinite(row.price) || row.price < 0 || !Number.isInteger(row.stock_quantity) || row.stock_quantity < 0)) { setMessage('Check product fields and variant lines. GST rate must be 0–100%. Each option line must be: name | price | stock | SKU.'); return; }
     setBusy(true); setMessage('');
-    const values = { name: name.trim(), slug: slug.trim().toLowerCase(), description: description.trim(), brand: brand.trim(), price: hasVariants ? null : amount, stock_quantity: hasVariants ? 0 : quantity, image_url: imageUrl.trim() || null, sku: sku.trim() || null, hsn_sac: hsnSac.trim(), gst_rate: parsedGstRate, category_id: parent.id, has_variants: hasVariants };
+    const values = { name: name.trim(), slug: slug.trim().toLowerCase(), description: description.trim(), brand: brand.trim(), price: hasVariants ? null : amount, image_url: imageUrl.trim() || null, sku: sku.trim() || null, hsn_sac: hsnSac.trim(), gst_rate: parsedGstRate, category_id: parent.id, has_variants: hasVariants };
+    // Stock is only set on creation; later changes go through adjust_inventory so a stale form never overwrites live sales.
+    const existing = activeProductId ? adminProducts.find(item => item.id === activeProductId) : undefined;
     const result = activeProductId
       ? await supabase.from('products').update(values).eq('id', activeProductId).select('id').single()
-      : await supabase.from('products').insert({ ...values, is_active: true }).select('id').single();
+      : await supabase.from('products').insert({ ...values, stock_quantity: hasVariants ? 0 : quantity, is_active: true }).select('id').single();
     if (result.error) setMessage(adminErrorMessage(result.error, 'Could not save this product. Review the fields and try again.'));
     else {
       const productId = result.data.id;
       let variantError: { message: string } | null = null;
       if (hasVariants) {
-        const deactivate = await supabase.from('product_variants').update({ is_active: false }).eq('product_id', productId);
-        if (deactivate.error) variantError = deactivate.error;
-        else {
-          const upsert = await supabase.from('product_variants').upsert(parsedVariants.map((row, index) => ({ ...row, product_id: productId, is_active: true, sort_order: index })), { onConflict: 'product_id,name' });
-          variantError = upsert.error;
-        }
+        const saved = await supabase.rpc('save_product_variants', { p_product_id: productId, p_variants: parsedVariants });
+        variantError = saved.error;
+      } else if (existing && !existing.hasVariants && quantity !== (existing.stockQuantity ?? 0)) {
+        const adjusted = await supabase.rpc('adjust_inventory', { p_product_id: productId, p_variant_id: null, p_delta: quantity - (existing.stockQuantity ?? 0), p_reason: 'Stock count updated from product form', p_movement_type: 'adjustment' });
+        variantError = adjusted.error;
       }
-      if (variantError) setMessage(`Product saved, but options need attention. ${adminErrorMessage(variantError, 'Retry saving the product options.')}`);
+      if (variantError) setMessage(`Product saved, but options or stock need attention. ${adminErrorMessage(variantError, 'Retry saving the product.')}`);
       else { setMessage(activeProductId ? 'Product updated.' : 'Product added.'); clearProductForm(); }
       await refreshCatalog(); await loadDashboard();
     }
@@ -349,6 +353,7 @@ export default function AdminScreen() {
       {activeTab === 'Categories' && <><Text style={styles.sectionTitle}>Catalog categories · {displayedCategories.length}</Text><Text style={styles.hint}>Add or update category details and artwork. Category images appear in the shop’s category cards.</Text><View style={styles.form}><Text style={styles.fieldLabel}>{activeCategoryId ? 'Edit category' : 'Add a category'}</Text><AdminField label="Category name" value={categoryName} onChangeText={setCategoryName} /><AdminField label="URL slug" value={categorySlug} onChangeText={setCategorySlug} autoCapitalize="none" /><AdminImageField label="Category image" imageUrl={categoryImageUrl} onChoose={() => void runAdminAction(uploadCategoryImage)} onRemove={() => setCategoryImageUrl('')} /><View style={styles.actions}><AdminButton label={busy ? 'Saving…' : activeCategoryId ? 'Save category' : 'Add category'} onPress={() => void runAdminAction(saveCategory)} />{activeCategoryId && <AdminButton label="Cancel edit" secondary onPress={() => { setActiveCategoryId(null); setCategoryName(''); setCategorySlug(''); setCategoryImageUrl(''); }} />}</View></View>{displayedCategories.map(item => <View key={item.id} style={styles.productRow}>{item.image_url ? <Image source={{ uri: item.image_url }} style={styles.catalogThumb} contentFit="contain" /> : <View style={styles.catalogThumbPlaceholder}><Text style={styles.rowSub}>No image</Text></View>}<View style={styles.rowCopy}><Text style={styles.rowTitle}>{item.name}</Text><Text style={styles.rowSub}>{item.exists === false ? 'Ready to add to the store database' : `${item.slug} · ${item.is_active ? 'Active' : 'Hidden'}`}</Text></View><View style={styles.rowActions}>{item.exists !== false && <Pressable onPress={() => editCategory(item)}><Text style={styles.link}>Edit</Text></Pressable>}<Pressable onPress={() => void runAdminAction(() => toggleCategory(item))}><Text style={item.exists === false ? styles.link : item.is_active ? styles.cancelLink : styles.link}>{item.exists === false ? 'Add' : item.is_active ? 'Hide' : 'Show'}</Text></Pressable></View></View>)}</>}
       {activeTab === 'Orders' && (role === 'staff' ? <BusinessOperationsPanel section="Sales" /> : <OrdersPanel orders={orders} selectedId={selectedOrderId} onSelect={setSelectedOrderId} busy={busy} onChangeStatus={(item, status) => void runAdminAction(() => changeOrderStatus(item, status))} />)}
       {activeTab === 'Billing' && (role === 'staff' ? <BusinessOperationsPanel section="Billing" /> : <BillingPanel products={adminProducts} variants={adminVariants} invoices={invoices} orders={orders} available={billingAvailable} busy={busy} runAction={runAdminAction} setMessage={setMessage} reload={loadDashboard} />)}
+      {role === 'admin' && ((activeTab === 'Orders' && orders.length < orderCount) || (activeTab === 'Billing' && invoices.length >= listLimit)) && <AdminButton label="Load older orders and invoices" secondary onPress={() => setListLimit(limit => limit + 100)} />}
       {activeTab === 'Returns' && <BusinessOperationsPanel section="CreditNotes" />}
       {activeTab === 'Customers' && <><Text style={styles.sectionTitle}>Customer accounts · {customers.length}</Text>{customers.map(item => <View key={item.user_id} style={styles.productRow}><View style={styles.rowCopy}><Text style={styles.rowTitle}>{item.display_name || 'Customer'}</Text><Text style={styles.rowSub}>{item.phone || 'No phone number'} · Joined {new Date(item.created_at).toLocaleDateString()}</Text></View></View>)}</>}
       {activeTab === 'Inventory' && <BusinessOperationsPanel section="Inventory" />}

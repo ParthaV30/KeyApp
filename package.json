@@ -49,7 +49,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test tests/validation.test.mjs tests/billing.test.mjs tests/invoiceDocument.test.mjs tests/stock.test.mjs tests/draftInvoice.test.mjs tests/authErrors.test.mjs tests/orderFlow.test.mjs",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test tests/validation.test.mjs tests/billing.test.mjs tests/invoiceDocument.test.mjs tests/stock.test.mjs tests/draftInvoice.test.mjs tests/authErrors.test.mjs tests/orderFlow.test.mjs tests/fetchAll.test.mjs",
     "db:start": "supabase start",
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",

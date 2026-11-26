@@ -49,3 +49,4 @@ example
 .idea/caches/
 .idea/deviceManager.xml
 .idea/workspace.xml
+.claude/settings.json.graphify-bak
