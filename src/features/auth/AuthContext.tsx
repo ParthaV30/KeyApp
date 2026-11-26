@@ -72,10 +72,15 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
     let mounted = true;
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       if (!mounted) return;
-      setSession(nextSession);
-      setRole(nextSession ? 'unknown' : null);
-      setBusinessPermissions([]);
-      if (!nextSession) setError(null);
+      // Token refreshes and tab refocus re-emit the same user; only a different user needs a fresh role check.
+      setSession(current => {
+        if (current?.user.id !== nextSession?.user.id) {
+          setRole(nextSession ? 'unknown' : null);
+          setBusinessPermissions([]);
+          if (!nextSession) setError(null);
+        }
+        return nextSession;
+      });
     });
     supabase.auth.getSession().then(({ data, error: sessionError }) => {
       if (sessionError) throw sessionError;
@@ -93,9 +98,9 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
 
   useEffect(() => {
     const client = supabase;
-    if (!client || !session) return;
+    if (!client || !userId) return;
     let cancelled = false;
-    Promise.resolve(client.from('profiles').select('role').eq('user_id', session.user.id).maybeSingle())
+    Promise.resolve(client.from('profiles').select('role').eq('user_id', userId).maybeSingle())
       .then(async ({ data, error: profileError }) => {
         if (cancelled) return;
         if (profileError) {
@@ -122,7 +127,7 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
         }
       });
     return () => { cancelled = true; };
-  }, [session]);
+  }, [userId]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     if (!supabase) throw new Error('Connect a Supabase project in the local .env file first.');
