@@ -50,3 +50,6 @@ example
 .idea/deviceManager.xml
 .idea/workspace.xml
 .claude/settings.json.graphify-bak
+
+# local MCP config (holds the Supabase project id)
+.mcp.json
