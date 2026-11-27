@@ -1,5 +1,5 @@
 import type { Session } from '@supabase/supabase-js';
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { backendConfigured, supabase } from '@/lib/supabase';
 import { isValidEmail, normalizeEmail, validateSignUp } from '@/lib/validation';
@@ -40,6 +40,31 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
   const [error, setError] = useState<string | null>(null);
   const userId = session?.user.id;
 
+  const latestRefresh = useRef(0);
+  // Sets state only after the first await, so it is safe to call from an effect.
+  const loadRole = useCallback(async () => {
+    const call = ++latestRefresh.current;
+    if (!supabase || !userId) return;
+    try {
+      const { data, error: profileError } = await supabase.from('profiles').select('role').eq('user_id', userId).maybeSingle();
+      if (profileError) throw profileError;
+      let permissions: BusinessPermission[] = ['inventory', 'purchasing', 'billing', 'sales', 'reports', 'audit'];
+      if (data?.role !== 'admin') {
+        const { data: access, error: accessError } = await supabase.rpc('get_business_permissions');
+        permissions = accessError ? [] : (Array.isArray(access) ? access : []) as BusinessPermission[];
+      }
+      if (call !== latestRefresh.current) return; // a newer refresh (another user) owns the state
+      setError(null);
+      setBusinessPermissions(permissions);
+      setRole(data?.role === 'admin' ? 'admin' : permissions.length ? 'staff' : 'customer');
+    } catch {
+      if (call !== latestRefresh.current) return;
+      setRole('unknown');
+      setBusinessPermissions([]);
+      setError('Could not verify your account permissions. Check your connection and retry.');
+    }
+  }, [userId]);
+
   const refreshRole = useCallback(async () => {
     if (!supabase || !userId) {
       setRole(null);
@@ -48,24 +73,8 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
     }
     setRole('unknown');
     setError(null);
-    try {
-      const { data, error: profileError } = await supabase.from('profiles').select('role').eq('user_id', userId).maybeSingle();
-      if (profileError) throw profileError;
-      if (data?.role === 'admin') {
-        setRole('admin');
-        setBusinessPermissions(['inventory', 'purchasing', 'billing', 'sales', 'reports', 'audit']);
-      } else {
-        const { data: access, error: accessError } = await supabase.rpc('get_business_permissions');
-        const permissions = accessError ? [] : (Array.isArray(access) ? access : []) as BusinessPermission[];
-        setBusinessPermissions(permissions);
-        setRole(permissions.length ? 'staff' : 'customer');
-      }
-    } catch {
-      setRole('unknown');
-      setBusinessPermissions([]);
-      setError('Could not verify your account permissions. Check your connection and retry.');
-    }
-  }, [userId]);
+    await loadRole();
+  }, [userId, loadRole]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -96,38 +105,9 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
     };
   }, []);
 
-  useEffect(() => {
-    const client = supabase;
-    if (!client || !userId) return;
-    let cancelled = false;
-    Promise.resolve(client.from('profiles').select('role').eq('user_id', userId).maybeSingle())
-      .then(async ({ data, error: profileError }) => {
-        if (cancelled) return;
-        if (profileError) {
-          setRole('unknown');
-          setBusinessPermissions([]);
-          setError('Could not verify your account permissions. Check your connection and retry.');
-          return;
-        }
-        setError(null);
-        if (data?.role === 'admin') {
-          setRole('admin');
-          setBusinessPermissions(['inventory', 'purchasing', 'billing', 'sales', 'reports', 'audit']);
-          return;
-        }
-        const { data: access, error: accessError } = await client.rpc('get_business_permissions');
-        const permissions = accessError ? [] : (Array.isArray(access) ? access : []) as BusinessPermission[];
-        setBusinessPermissions(permissions);
-        setRole(permissions.length ? 'staff' : 'customer');
-      }).catch(() => {
-        if (!cancelled) {
-          setRole('unknown');
-          setBusinessPermissions([]);
-          setError('Could not verify your account permissions. Check your connection and retry.');
-        }
-      });
-    return () => { cancelled = true; };
-  }, [userId]);
+  // loadRole sets state only after awaiting the network, never during the effect itself.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void loadRole(); }, [loadRole]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     if (!supabase) throw new Error('Connect a Supabase project in the local .env file first.');
