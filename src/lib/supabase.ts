@@ -7,7 +7,11 @@ import { secureSessionStorage } from '@/lib/secureSessionStorage';
 // but Node (Expo Router server-side rendering) may not — fall back to ws.
 if (typeof WebSocket === 'undefined') {
   // Direct eval keeps Metro from bundling the Node-only `ws` into native/web builds, where this branch never runs.
-  globalThis.WebSocket = eval('require')('ws') as typeof WebSocket;
+  try {
+    globalThis.WebSocket = eval('require')('ws') as typeof WebSocket;
+  } catch {
+    // Realtime is unused here; a runtime without `ws` must not stop the app from starting.
+  }
 }
 
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
