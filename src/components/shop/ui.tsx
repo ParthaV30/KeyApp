@@ -248,10 +248,9 @@ export function ProductCard({
   product: Product;
   compact?: boolean;
 }) {
-  const { favorites, addToCart, toggleFavorite } = useShop();
+  const { favorites, toggleFavorite } = useShop();
   const saved = favorites.includes(product.id);
   const hasRange = product.hasVariants || product.priceLabel.includes('–');
-  const canAdd = !product.hasVariants && (product.stockQuantity === undefined || product.stockQuantity > 0);
 
   return (
     <View style={[styles.productCard, compact && styles.productCardCompact]}>
@@ -284,25 +283,6 @@ export function ProductCard({
         <Text style={styles.productPrice} numberOfLines={1}>
           {product.priceLabel}
         </Text>
-        <Pressable
-          disabled={!canAdd}
-          onPress={() => {
-            addToCart(product.id);
-          }}
-          style={({ pressed }) => [styles.addButton, !canAdd && styles.addButtonDisabled, pressed && canAdd && styles.pressedControl]}
-          accessibilityRole="button"
-          accessibilityLabel={
-            canAdd
-              ? `Add ${product.name} to cart`
-              : product.hasVariants
-              ? 'Choose a product option'
-              : 'Out of stock'
-          }
-        >
-          <Text style={[styles.addGlyph, !canAdd && styles.addGlyphDisabled]}>
-            {canAdd ? '+' : product.hasVariants ? '⋯' : '−'}
-          </Text>
-        </Pressable>
       </View>
 
       <Pressable
@@ -569,17 +549,6 @@ const styles = StyleSheet.create({
     paddingRight: 4,
     fontFamily: 'Manrope',
   },
-  addButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 13,
-    backgroundColor: C.orange,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  addButtonDisabled: { backgroundColor: '#E4E1DA' },
-  addGlyph: { color: C.white, fontSize: 20, lineHeight: 22, fontWeight: '700', fontFamily: 'Manrope' },
-  addGlyphDisabled: { color: '#9CA3AF' },
   favoriteButton: {
     position: 'absolute',
     top: 16,
